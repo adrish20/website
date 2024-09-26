@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Failure Prediction</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #e9f3ff;
+            color: #333;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #007bff;
+            border-radius: 10px;
+            background: #ffffff;
+            box-shadow: 0 4px 15px rgba(0, 123, 255, 0.2);
+        }
+        h2 {
+            text-align: center;
+            color: #007bff;
+            margin-bottom: 20px;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #007bff;
+            border-radius: 5px;
+            background-color: #d1e7fd;
+        }
+        .result-item {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Network Failure Prediction</h2>
+        <button id="measure-btn" onclick="measureNetworkParams()">Measure Network Parameters</button>
+        <button id="predict-btn" onclick="predictNetworkFailure()" disabled>Predict Network Failure</button>
+        <div id="network-details" class="results"></div>
+    </div>
+
+    <script>
+        let lastMeasurements = null; // Store last measurements for prediction
+
+        // Function to add random noise to simulate small variations in downlink
+        function addNoise(value, range) {
+            const noise = (Math.random() * range - range / 2);
+            return value + noise;
+        }
+
+        // Function to measure network parameters
+        async function measureNetworkParams() {
+            try {
+                // Clear previous results
+                document.getElementById('network-details').innerHTML = '';
+
+                // Get user's location
+                const location = await getUserLocation();
+                const areaName = await getAreaName(location.lat, location.lng);
+
+                // Measure downlink over 20 seconds
+                const measurements = [];
+                const measurementDuration = 10; // seconds
+                const sampleInterval = 1000; // 1 second
+
+                for (let i = 0; i < measurementDuration; i++) {
+                    if ('connection' in navigator) {
+                        const networkInfo = navigator.connection;
+                        const downlink = networkInfo.downlink ? parseFloat(networkInfo.downlink) : 0;
+                        const rtt = networkInfo.rtt ? parseFloat(networkInfo.rtt) : 0;
+
+                        measurements.push({
+                            downlink: addNoise(downlink, 2),
+                            rtt: rtt // Latency (RTT) doesn't need averaging
+                        });
+
+                        // Wait for the next sample
+                        await new Promise(resolve => setTimeout(resolve, sampleInterval));
+                    } else {
+                        alert('Network Information API not supported in your browser.');
+                        return;
+                    }
+                }
+
+                // Calculate average downlink
+                const avgDownlink = calculateAverage(measurements.map(m => m.downlink));
+                const avgRtt = measurements[measurements.length - 1].rtt; // Get the latest latency
+
+                // Store last measurements for prediction
+                lastMeasurements = {
+                    downlink: avgDownlink,
+                    rtt: avgRtt,
+                    area_name: areaName
+                };
+
+                // Display the measured parameters
+                document.getElementById('network-details').innerHTML = `
+                    <div class="result-item"><strong>Area:</strong> ${areaName}</div>
+                    <div class="result-item"><strong>Network Type:</strong> 5G</div>
+                    <div class="result-item"><strong>Average Downlink:</strong> ${avgDownlink.toFixed(2)} Mbps</div>
+                    <div class="result-item"><strong>Latency (RTT):</strong> ${avgRtt.toFixed(2)} ms</div>
+                `;
+
+                // Estimate and display signal strength based on downlink and latency
+                const signalStrength = estimateSignalStrength(avgRtt, avgDownlink);
+                document.getElementById('network-details').innerHTML += `
+                    <div class="result-item"><strong>Estimated Signal Strength:</strong> ${signalStrength} dBm</div>
+                `;
+
+                // Enable the prediction button
+                document.getElementById('predict-btn').disabled = false;
+
+            } catch (error) {
+                console.error('Error measuring network parameters:', error);
+                alert('Error measuring network parameters: ' + error.message);
+            }
+        }
+
+        // Get user's location using the Geolocation API
+        function getUserLocation() {
+            return new Promise((resolve, reject) => {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        position => {
+                            resolve({
+                                lat: position.coords.latitude,
+                                lng: position.coords.longitude
+                            });
+                        },
+                        error => reject('Unable to retrieve location: ' + error.message)
+                    );
+                } else {
+                    reject('Geolocation is not supported by this browser.');
+                }
+            });
+        }
+
+        // Get area name from latitude and longitude using reverse geocoding
+        async function getAreaName(lat, lng) {
+            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+            const data = await response.json();
+            return data.display_name || 'Unknown Area';
+        }
+
+        // Get network type, defaulting to "5G"
+        function getNetworkType() {
+            return '5G'; // Always return "5G"
+        }
+
+        // Calculate average from an array of numbers
+        function calculateAverage(arr) {
+            const total = arr.reduce((acc, val) => acc + val, 0);
+            return (total / arr.length) || 0; // Return 0 if no values
+        }
+
+        // Estimate signal strength in dBm based on latency and downlink
+        function estimateSignalStrength(rtt, downlink) {
+            let signalStrength;
+
+            // Simple formula for estimating signal strength based on downlink speed
+            if (downlink > 50) {
+                signalStrength = -30;  // Excellent
+            } else if (downlink > 20) {
+                signalStrength = -70;  // Good
+            } else if (downlink > 10) {
+                signalStrength = -90;  // Fair
+            } else {
+                signalStrength = -110; // Poor
+            }
+
+            // Adjust based on latency (in ms)
+            if (rtt > 200) {
+                signalStrength -= 10; // Decrease signal strength for higher latency
+            } else if (rtt > 100) {
+                signalStrength -= 5;  // Slight decrease for moderate latency
+            }
+
+            return signalStrength; // Return in dBm
+        }
+
+        // Predict network failure using backend
+        async function predictNetworkFailure() {
+            if (!lastMeasurements) {
+                alert('Please measure network parameters before predicting failure.');
+                return;
+            }
+
+            const { downlink, rtt, area_name } = lastMeasurements;
+            const signalStrength = estimateSignalStrength(rtt, downlink);
+
+            const data = {
+                network_type: '5G',
+                downlink: downlink,
+                rtt: rtt,
+                signal_strength: signalStrength,
+                area_name: area_name
+            };
+
+            try {
+                const response = await fetch('http://localhost:5000/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                document.getElementById('network-details').innerHTML += `
+                    <div class="result-item"><strong>Failure Prediction:</strong> ${result.prediction}</div>
+                `;
+
+            } catch (error) {
+                console.error('Error during network failure prediction:', error);
+                alert('Error during prediction: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
