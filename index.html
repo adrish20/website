@@ -69,149 +69,65 @@
     <script>
         let lastMeasurements = null; // Store last measurements for prediction
 
-        // Function to add random noise to simulate small variations in downlink
-        function addNoise(value, range) {
-            const noise = (Math.random() * range - range / 2);
-            return value + noise;
+        // Function to measure download speed by fetching a large file
+        async function measureDownloadSpeed() {
+            try {
+                const fileSizeInMB = 10; // Size of the test file
+                const startTime = new Date().getTime(); // Start time for download
+                const response = await fetch('https://speed.hetzner.de/10MB.bin'); // Download a large file for measurement
+                const endTime = new Date().getTime(); // End time after download
+
+                if (response.ok) {
+                    const durationInSeconds = (endTime - startTime) / 1000;
+                    const downloadSpeedMbps = (fileSizeInMB / durationInSeconds) * 8; // Calculate speed in Mbps
+                    return downloadSpeedMbps;
+                } else {
+                    throw new Error('Error fetching file.');
+                }
+            } catch (error) {
+                console.error('Error measuring download speed:', error);
+                return 0;
+            }
+        }
+
+        // Function to measure latency using a lightweight ping
+        async function measureLatency() {
+            try {
+                const startTime = new Date().getTime(); // Start timer
+                const response = await fetch('https://www.google.com', { method: 'HEAD' }); // Ping Google for latency test
+                const endTime = new Date().getTime(); // End timer
+                const latency = endTime - startTime; // Calculate RTT (Round-trip time)
+                return latency;
+            } catch (error) {
+                console.error('Error measuring latency:', error);
+                return 0;
+            }
         }
 
         // Function to measure network parameters
         async function measureNetworkParams() {
             try {
-                // Clear previous results
-                document.getElementById('network-details').innerHTML = '';
+                document.getElementById('network-details').innerHTML = 'Measuring...';
 
-                // Get user's location
-                const location = await getUserLocation();
-                const areaName = await getAreaName(location.lat, location.lng);
-
-                // Measure downlink over 15 seconds
-                const measurements = [];
-                const measurementDuration = 7; // seconds
-                const sampleInterval = 1000; // 1 second
-
-                for (let i = 0; i < measurementDuration; i++) {
-                    if ('connection' in navigator && navigator.connection.downlink) {
-                        const networkInfo = navigator.connection;
-                        const downlink = parseFloat(networkInfo.downlink) || 0;
-                        const rtt = parseFloat(networkInfo.rtt) || 0;
-
-                        measurements.push({
-                            downlink: addNoise(downlink, 2),
-                            rtt: rtt // Latency (RTT) doesn't need averaging
-                        });
-
-                        // Wait for the next sample
-                        await new Promise(resolve => setTimeout(resolve, sampleInterval));
-                    } else {
-                        alert('Network Information API not supported or no downlink info available.');
-                        return;
-                    }
-                }
-
-                // Calculate average downlink
-                const avgDownlink = calculateAverage(measurements.map(m => m.downlink));
-                const avgRtt = measurements[measurements.length - 1].rtt; // Get the latest latency
-
-                // Store last measurements for prediction
-                lastMeasurements = {
-                    downlink: avgDownlink,
-                    rtt: avgRtt,
-                    area_name: areaName
-                };
+                // Measure download speed
+                const downloadSpeed = await measureDownloadSpeed();
+                // Measure latency
+                const latency = await measureLatency();
 
                 // Display the measured parameters
                 document.getElementById('network-details').innerHTML = `
-                    <div class="result-item"><strong>Area:</strong> ${areaName}</div>
                     <div class="result-item"><strong>Network Type:</strong> 5G</div>
-                    <div class="result-item"><strong>Average Downlink:</strong> ${avgDownlink.toFixed(2)} Mbps</div>
-                    <div class="result-item"><strong>Latency (RTT):</strong> ${avgRtt.toFixed(2)} ms</div>
+                    <div class="result-item"><strong>Download Speed:</strong> ${downloadSpeed.toFixed(2)} Mbps</div>
+                    <div class="result-item"><strong>Latency:</strong> ${latency} ms</div>
                 `;
 
-                // Estimate and display signal strength based on downlink and latency
-                const signalStrength = estimateSignalStrength(avgRtt, avgDownlink);
-                document.getElementById('network-details').innerHTML += `
-                    <div class="result-item"><strong>Estimated Signal Strength:</strong> ${signalStrength} dBm</div>
-                `;
-
-                // Enable the prediction button
+                // Store results for prediction
+                lastMeasurements = { downlink: downloadSpeed, rtt: latency };
                 document.getElementById('predict-btn').disabled = false;
-
             } catch (error) {
                 console.error('Error measuring network parameters:', error);
                 alert('Error measuring network parameters: ' + error.message);
             }
-        }
-
-        // Get user's location using the Geolocation API
-        function getUserLocation() {
-            return new Promise((resolve, reject) => {
-                if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(
-                        position => {
-                            resolve({
-                                lat: position.coords.latitude,
-                                lng: position.coords.longitude
-                            });
-                        },
-                        error => {
-                            alert('Unable to retrieve location. Defaulting to unknown area.');
-                            resolve({ lat: 0, lng: 0 }); // Fallback coordinates
-                        }
-                    );
-                } else {
-                    alert('Geolocation is not supported by this browser.');
-                    resolve({ lat: 0, lng: 0 }); // Fallback coordinates
-                }
-            });
-        }
-
-        // Get area name from latitude and longitude using reverse geocoding
-        async function getAreaName(lat, lng) {
-            try {
-                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
-                const data = await response.json();
-                return data.display_name || 'Unknown Area';
-            } catch (error) {
-                console.error('Error fetching area name:', error);
-                return 'Unknown Area';
-            }
-        }
-
-        // Get network type, defaulting to "5G"
-        function getNetworkType() {
-            return '5G'; // Always return "5G"
-        }
-
-        // Calculate average from an array of numbers
-        function calculateAverage(arr) {
-            const total = arr.reduce((acc, val) => acc + val, 0);
-            return (total / arr.length) || 0; // Return 0 if no values
-        }
-
-        // Estimate signal strength in dBm based on latency and downlink
-        function estimateSignalStrength(rtt, downlink) {
-            let signalStrength;
-
-            // Simple formula for estimating signal strength based on downlink speed
-            if (downlink > 50) {
-                signalStrength = -30;  // Excellent
-            } else if (downlink > 20) {
-                signalStrength = -70;  // Good
-            } else if (downlink > 10) {
-                signalStrength = -90;  // Fair
-            } else {
-                signalStrength = -110; // Poor
-            }
-
-            // Adjust based on latency (in ms)
-            if (rtt > 200) {
-                signalStrength -= 10; // Decrease signal strength for higher latency
-            } else if (rtt > 100) {
-                signalStrength -= 5;  // Slight decrease for moderate latency
-            }
-
-            return signalStrength; // Return in dBm
         }
 
         // Predict network failure using backend
@@ -221,15 +137,14 @@
                 return;
             }
 
-            const { downlink, rtt, area_name } = lastMeasurements;
+            const { downlink, rtt } = lastMeasurements;
             const signalStrength = estimateSignalStrength(rtt, downlink);
 
             const data = {
                 network_type: '5G',
                 downlink: downlink,
                 rtt: rtt,
-                signal_strength: signalStrength,
-                area_name: area_name
+                signal_strength: signalStrength
             };
 
             try {
@@ -238,10 +153,6 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
-
-                if (!response.ok) {
-                    throw new Error('Failed to fetch prediction: ' + response.status);
-                }
 
                 const result = await response.json();
                 document.getElementById('network-details').innerHTML += `
@@ -253,6 +164,32 @@
                 alert('Error during prediction: ' + error.message);
             }
         }
+
+        // Simple formula to estimate signal strength in dBm
+        function estimateSignalStrength(rtt, downlink) {
+            let signalStrength;
+
+            // Estimating signal strength based on downlink speed
+            if (downlink > 50) {
+                signalStrength = -30;  // Excellent
+            } else if (downlink > 20) {
+                signalStrength = -70;  // Good
+            } else if (downlink > 10) {
+                signalStrength = -90;  // Fair
+            } else {
+                signalStrength = -110; // Poor
+            }
+
+            // Adjust signal strength based on latency
+            if (rtt > 200) {
+                signalStrength -= 10; // Higher latency decreases signal strength
+            } else if (rtt > 100) {
+                signalStrength -= 5;  // Moderate latency decreases signal strength
+            }
+
+            return signalStrength;
+        }
+
     </script>
 </body>
 </html>
