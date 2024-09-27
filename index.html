@@ -134,14 +134,13 @@
 
                 // Display the measured parameters
                 document.getElementById('network-details').innerHTML += `
-                    <div class="result-item"><strong>Network Type:</strong> 5G</div>
                     <div class="result-item"><strong>Download Speed:</strong> ${downloadSpeed.toFixed(2)} Mbps</div>
                     <div class="result-item"><strong>Latency:</strong> ${latency.toFixed(2)} ms</div>
                     <div class="result-item"><strong>Estimated Signal Strength:</strong> ${signalStrength} dBm</div>
                 `;
 
                 // Store the measurements for prediction
-                lastMeasurements = { downlink: downloadSpeed, rtt: latency };
+                lastMeasurements = { downlink: downloadSpeed, rtt: latency, signalStrength: signalStrength };
                 document.getElementById('predict-btn').disabled = false; // Enable prediction button
             } catch (error) {
                 console.error('Error measuring network parameters:', error);
@@ -180,22 +179,17 @@
                 return;
             }
 
-            const { downlink, rtt } = lastMeasurements;
-            const signalStrength = estimateSignalStrength(rtt, downlink);
+            const { downlink, rtt, signalStrength } = lastMeasurements;
 
-            const data = {
-                network_type: '5G',
-                downlink: downlink,
-                rtt: rtt,
-                signal_strength: signalStrength
-            };
+            // Check conditions for network failure
+            let failureMessage = 'No Failure Expected';
+            if (signalStrength < -95 && rtt > 120) {
+                failureMessage = 'Failure Expected';
+            }
 
-            // Simulating backend prediction response
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Simulated delay
-
-            // Display simulated prediction result
+            // Display prediction result
             document.getElementById('network-details').innerHTML += `
-                <div class="result-item"><strong>Failure Prediction:</strong> No Failure Expected</div>
+                <div class="result-item"><strong>Failure Prediction:</strong> ${failureMessage}</div>
             `;
         }
 
