@@ -76,13 +76,24 @@
             return randomSpeed;
         }
 
-        // Function to measure actual latency using Cloudflare ping API
-        async function measureLatency() {
+        // Function to measure latency with averaging to stabilize results
+        async function measureLatency(repeats = 5) {
             try {
-                const start = performance.now();
-                await fetch('https://1.1.1.1/cdn-cgi/trace'); // Cloudflare service for latency
-                const end = performance.now();
-                return end - start; // Return the round-trip time
+                let totalLatency = 0;
+
+                for (let i = 0; i < repeats; i++) {
+                    const start = performance.now();
+                    await fetch('https://1.1.1.1/cdn-cgi/trace'); // Cloudflare service for latency
+                    const end = performance.now();
+                    const latency = end - start;
+                    totalLatency += latency;
+
+                    // Wait a bit before the next ping (optional)
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                }
+
+                // Return the averaged latency
+                return totalLatency / repeats;
             } catch (error) {
                 console.error('Error measuring latency:', error);
                 return 0; // Return 0 in case of error
@@ -96,7 +107,7 @@
 
                 // Simulate measuring download speed
                 const downloadSpeed = await measureDownloadSpeed();
-                // Measure actual latency
+                // Measure actual latency with averaging
                 const latency = await measureLatency();
 
                 // Estimate signal strength based on downlink and latency
