@@ -67,7 +67,7 @@
     </div>
 
     <script>
-        let lastMeasurements = null; // Store last measurements for prediction
+        let lastMeasurements = null;
 
         // Function to simulate download speed test (generating random values for now)
         async function measureDownloadSpeed() {
@@ -76,11 +76,11 @@
             return randomSpeed;
         }
 
-        // Function to measure actual latency by pinging a server
+        // Function to measure actual latency using Cloudflare ping API
         async function measureLatency() {
             try {
                 const start = performance.now();
-                await fetch('https://www.google.com', { mode: 'no-cors' }); // Sending a request to Google
+                await fetch('https://1.1.1.1/cdn-cgi/trace'); // Cloudflare service for latency
                 const end = performance.now();
                 return end - start; // Return the round-trip time
             } catch (error) {
@@ -123,13 +123,13 @@
         function estimateSignalStrength(rtt, downlink) {
             let signalStrength;
             if (downlink > 50) {
-                signalStrength = -45;  // Excellent
+                signalStrength = -30;  // Excellent
             } else if (downlink > 20) {
-                signalStrength = -75;  // Good
+                signalStrength = -70;  // Good
             } else if (downlink > 10) {
-                signalStrength = -95;  // Fair
+                signalStrength = -90;  // Fair
             } else {
-                signalStrength = -115; // Poor
+                signalStrength = -110; // Poor
             }
 
             // Adjust signal strength based on latency
