@@ -69,8 +69,13 @@
     <script>
         let lastMeasurements = null;
 
-        // Function to simulate download speed test (generating random values for now)
+        // Function to measure download speed
         async function measureDownloadSpeed() {
+            // Check network status
+            if (!navigator.onLine) {
+                return 0; // Return 0 if offline
+            }
+
             const randomSpeed = Math.random() * 50 + 20; // Random speed between 20 and 70 Mbps
             await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate network test delay
             return randomSpeed;
@@ -94,7 +99,7 @@
             try {
                 document.getElementById('network-details').innerHTML = 'Measuring...';
 
-                // Simulate measuring download speed
+                // Measure download speed
                 const downloadSpeed = await measureDownloadSpeed();
                 // Measure actual latency
                 const latency = await measureLatency();
@@ -128,8 +133,11 @@
                 signalStrength = -75;  // Good
             } else if (downlink > 10) {
                 signalStrength = -95;  // Fair
-            } else {
+            } else if (downlink>1){
                 signalStrength = -105; // Poor
+            }
+            else {
+                signalstrength = 0;
             }
 
             // Adjust signal strength based on latency
