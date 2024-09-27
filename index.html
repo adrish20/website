@@ -96,8 +96,8 @@
                 return 0; // Return 0 if offline
             }
 
-            const randomSpeed = Math.random() * 50 + 20; // Random speed between 20 and 70 Mbps
-            await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate network test delay
+            const randomSpeed = Math.random() * 50 + 20; 
+            await new Promise(resolve => setTimeout(resolve, 3000)); 
             return randomSpeed;
         }
 
