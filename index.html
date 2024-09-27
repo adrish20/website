@@ -76,24 +76,13 @@
             return randomSpeed;
         }
 
-        // Function to measure latency with averaging to stabilize results
-        async function measureLatency(repeats = 5) {
+        // Function to measure actual latency using Cloudflare ping API
+        async function measureLatency() {
             try {
-                let totalLatency = 0;
-
-                for (let i = 0; i < repeats; i++) {
-                    const start = performance.now();
-                    await fetch('https://1.1.1.1/cdn-cgi/trace'); // Cloudflare service for latency
-                    const end = performance.now();
-                    const latency = end - start;
-                    totalLatency += latency;
-
-                    // Wait a bit before the next ping (optional)
-                    await new Promise(resolve => setTimeout(resolve, 300));
-                }
-
-                // Return the averaged latency
-                return totalLatency / repeats;
+                const start = performance.now();
+                await fetch('https://1.1.1.1/cdn-cgi/trace'); // Cloudflare service for latency
+                const end = performance.now();
+                return end - start; // Return the round-trip time
             } catch (error) {
                 console.error('Error measuring latency:', error);
                 return 0; // Return 0 in case of error
@@ -107,7 +96,7 @@
 
                 // Simulate measuring download speed
                 const downloadSpeed = await measureDownloadSpeed();
-                // Measure actual latency with averaging
+                // Measure actual latency
                 const latency = await measureLatency();
 
                 // Estimate signal strength based on downlink and latency
@@ -134,13 +123,13 @@
         function estimateSignalStrength(rtt, downlink) {
             let signalStrength;
             if (downlink > 50) {
-                signalStrength = -30;  // Excellent
+                signalStrength = -45;  // Excellent
             } else if (downlink > 20) {
-                signalStrength = -70;  // Good
+                signalStrength = -75;  // Good
             } else if (downlink > 10) {
-                signalStrength = -90;  // Fair
+                signalStrength = -95;  // Fair
             } else {
-                signalStrength = -110; // Poor
+                signalStrength = -105; // Poor
             }
 
             // Adjust signal strength based on latency
