@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Network Failure Prediction</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -18,21 +19,20 @@
         }
         .container {
             max-width: 500px;
-            margin: 0 auto;
             padding: 20px;
             border: 1px solid #007bff;
             border-radius: 10px;
             background: #ffffff;
             box-shadow: 0 4px 15px rgba(0, 123, 255, 0.2);
+            text-align: center;
         }
         h2 {
             text-align: center;
             color: #007bff;
-            margin-bottom: 20px;
         }
         button {
             width: 100%;
-            padding: 15px;
+            padding: 10px;
             margin: 10px 0;
             border: none;
             border-radius: 5px;
@@ -40,7 +40,6 @@
             color: white;
             font-size: 16px;
             cursor: pointer;
-            transition: background 0.3s;
         }
         button:hover {
             background-color: #0056b3;
@@ -52,147 +51,128 @@
             border-radius: 5px;
             background-color: #d1e7fd;
         }
-        .result-item {
-            margin: 5px 0;
+        #map {
+            height: 300px;
+            width: 100%;
+            margin-top: 10px;
+            border-radius: 5px;
         }
     </style>
 </head>
 <body>
-
     <div class="container">
         <h2>Network Failure Prediction</h2>
-        <button id="measure-btn" onclick="measureNetworkParams()">Measure Network Parameters</button>
+        <button onclick="measureNetworkParams()">Measure Network Parameters</button>
         <button id="predict-btn" onclick="predictNetworkFailure()" disabled>Predict Network Failure</button>
         <div id="network-details" class="results"></div>
+        <div id="map"></div>
     </div>
-
+    
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
         let lastMeasurements = null;
+        let map = null;
 
-        // Function to get user location
         async function getUserLocation() {
             return new Promise((resolve, reject) => {
                 if (navigator.geolocation) {
-                    navigator.geolocation.getCurrentPosition(
-                        position => resolve(position),
-                        error => reject(error)
-                    );
+                    navigator.geolocation.getCurrentPosition(resolve, reject);
                 } else {
-                    reject(new Error('Geolocation is not supported by this browser.'));
+                    reject(new Error('Geolocation not supported.'));
                 }
             });
         }
 
-        // Function to reverse geocode coordinates to an address
-        async function getAddress(latitude, longitude) {
-            const response = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
-            const data = await response.json();
-            return data.display_name || 'Address not found';
-        }
-
-        // Function to measure download speed
-        async function measureDownloadSpeed() {
-            if (!navigator.onLine) {
-                return 0; // Return 0 if offline
+        async function getAddress(lat, lon) {
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
+                const data = await response.json();
+                return data.display_name || 'Address not found';
+            } catch {
+                return 'Error fetching address';
             }
-
-            const randomSpeed = Math.random() * 50 + 20; 
-            await new Promise(resolve => setTimeout(resolve, 3000)); 
-            return randomSpeed;
         }
 
-        // Function to measure actual latency using Cloudflare ping API
+        async function measureDownloadSpeed() {
+            if (!navigator.onLine) return 0;
+            const speed = Math.random() * 50 + 20;
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            return speed;
+        }
+
         async function measureLatency() {
             try {
-                const start = performance.now();
-                await fetch('https://1.1.1.1/cdn-cgi/trace'); // Cloudflare service for latency
-                const end = performance.now();
-                return end - start; // Return the round-trip time
+                let latencies = [];
+                for (let i = 0; i < 5; i++) {
+                    const start = performance.now();
+                    await fetch('https://www.cloudflare.com/cdn-cgi/trace', { cache: 'no-store', mode: 'no-cors' });
+                    latencies.push(performance.now() - start);
+                }
+                return (latencies.reduce((a, b) => a + b, 0) / latencies.length).toFixed(2);
             } catch (error) {
                 console.error('Error measuring latency:', error);
-                return 0; // Return 0 in case of error
+                return null;
             }
         }
 
-        // Function to measure network parameters
         async function measureNetworkParams() {
+            document.getElementById('network-details').innerHTML = 'Measuring...';
             try {
-                document.getElementById('network-details').innerHTML = 'Measuring...';
-
-                // Get user location
                 const position = await getUserLocation();
-                const address = await getAddress(position.coords.latitude, position.coords.longitude);
-                document.getElementById('network-details').innerHTML += `<div class="result-item"><strong>Your Location:</strong> ${address}</div>`;
-
-                // Measure download speed
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                const address = await getAddress(lat, lon);
                 const downloadSpeed = await measureDownloadSpeed();
-                // Measure actual latency
-                const latency = await measureLatency();
-
-                // Estimate signal strength based on downlink and latency
-                const signalStrength = estimateSignalStrength(latency, downloadSpeed);
-
-                // Display the measured parameters
-                document.getElementById('network-details').innerHTML += `
-                    <div class="result-item"><strong>Download Speed:</strong> ${downloadSpeed.toFixed(2)} Mbps</div>
-                    <div class="result-item"><strong>Latency:</strong> ${latency.toFixed(2)} ms</div>
-                    <div class="result-item"><strong>Estimated Signal Strength:</strong> ${signalStrength} dBm</div>
+                let latency = await measureLatency();
+                latency = latency !== null ? latency + ' ms' : 'Unavailable';
+                const signalStrength = estimateSignalStrength(Number(latency.replace(' ms', '')), downloadSpeed);
+                document.getElementById('network-details').innerHTML = `
+                    <div><strong>Location:</strong> ${address}</div>
+                    <div><strong>Download Speed:</strong> ${downloadSpeed.toFixed(2)} Mbps</div>
+                    <div><strong>Latency:</strong> ${latency}</div>
+                    <div><strong>Signal Strength:</strong> ${signalStrength} dBm</div>
                 `;
-
-                // Store the measurements for prediction
-                lastMeasurements = { downlink: downloadSpeed, rtt: latency, signalStrength: signalStrength };
-                document.getElementById('predict-btn').disabled = false; // Enable prediction button
+                lastMeasurements = { downlink: downloadSpeed, latency: latency === 'Unavailable' ? null : Number(latency.replace(' ms', '')), signalStrength };
+                document.getElementById('predict-btn').disabled = false;
+                updateMap(lat, lon);
             } catch (error) {
-                console.error('Error measuring network parameters:', error);
+                console.error('Error:', error);
                 alert('Error measuring network parameters: ' + error.message);
             }
         }
 
-        // Simple signal strength estimation based on downlink and latency
-        function estimateSignalStrength(rtt, downlink) {
-            let signalStrength;
-            if (downlink > 50) {
-                signalStrength = -45;  // Excellent
-            } else if (downlink > 20) {
-                signalStrength = -75;  // Good
-            } else if (downlink > 10) {
-                signalStrength = -95;  // Fair
-            } else if (downlink > 1){
-                signalStrength = -105; // Poor
-            } else {
-                signalStrength = 0;
-            }
-
-            // Adjust signal strength based on latency
-            if (rtt > 200) {
-                signalStrength -= 10;
-            } else if (rtt > 100) {
-                signalStrength -= 5;
-            }
-            return signalStrength;
+        function estimateSignalStrength(latency, downlink) {
+            let signal = downlink > 50 ? -45 : downlink > 20 ? -75 : downlink > 10 ? -95 : -105;
+            if (latency > 200) signal -= 10;
+            else if (latency > 100) signal -= 5;
+            return signal;
         }
 
-        // Predict network failure using backend (simulated for now)
-        async function predictNetworkFailure() {
+        function predictNetworkFailure() {
             if (!lastMeasurements) {
-                alert('Please measure network parameters before predicting failure.');
+                alert('Measure network parameters first.');
                 return;
             }
-
-            const { downlink, rtt, signalStrength } = lastMeasurements;
-
-            // Check conditions for network failure
-            let failureMessage = 'No Failure Expected';
-            if (signalStrength < -95 && rtt > 120) {
-                failureMessage = 'Failure Expected';
-            }
-
-            // Display prediction result
+            const { latency, signalStrength } = lastMeasurements;
+            const failurePrediction = signalStrength < -95 && latency > 120 ? 'Failure Expected' : 'No Failure Expected';
             document.getElementById('network-details').innerHTML += `
-                <div class="result-item"><strong>Failure Prediction:</strong> ${failureMessage}</div>
+                <div><strong>Failure Prediction:</strong> ${failurePrediction}</div>
             `;
         }
 
+        function updateMap(lat, lon) {
+            if (!map) {
+                map = L.map('map').setView([lat, lon], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+            } else {
+                map.setView([lat, lon], 13);
+            }
+            L.marker([lat, lon]).addTo(map)
+                .bindPopup('Current Location')
+                .openPopup();
+        }
     </script>
 </body>
 </html>
